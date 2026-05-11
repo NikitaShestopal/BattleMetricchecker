@@ -1,7 +1,9 @@
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 import time
+import csv
 from datetime import datetime
+import os
 
 URLS = [
     "https://www.battlemetrics.com/players/46354742",
@@ -11,27 +13,34 @@ URLS = [
 ]
 
 DELAY_BETWEEN_CYCLES = 60
-LOG_FILE = "activity_log.txt"
+CSV_FILE = "activity_log.csv"
 
 
-def log_to_file(message):
-    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    full_message = f"{timestamp} {message}"
-    print(full_message)
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(full_message + "\n")
+def log_to_csv(name, status, server):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file_exists = os.path.isfile(CSV_FILE)
+
+    with open(CSV_FILE, mode='a', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f, delimiter=';')
+        if not file_exists:
+            writer.writerow(['Час', 'Гравець', 'Статус', 'Сервер'])
+
+        writer.writerow([timestamp, name, status, server])
+
+    print(f"[{timestamp}] {name}: {status} | {server}")
 
 
 def check_players():
-    options = uc.ChromeOptions()
-    options.add_argument('--headless')
-    options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-
-    print(f"🚀 Запуск моніторингу... (пауза між циклами: {DELAY_BETWEEN_CYCLES} сек.)")
+    print(f"🚀 Моніторинг запущено. Дані пишуться в {CSV_FILE}")
 
     while True:
         driver = None
         try:
+            # ПЕРЕНЕСЕНО СЮДИ: Кожного разу створюємо нові опції
+            options = uc.ChromeOptions()
+            options.add_argument('--headless')
+            options.binary_location = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+
             driver = uc.Chrome(options=options, version_main=144)
 
             for url in URLS:
@@ -41,27 +50,26 @@ def check_players():
 
                     try:
                         name = driver.find_element(By.TAG_NAME, "h1").text.replace(" Overview", "").strip()
-                        if "battlemetrics" in name.lower() or not name:
-                            name = f"ID:{url.split('/')[-1]}"
                     except:
                         name = f"ID:{url.split('/')[-1]}"
 
-                    server = "Offline"
+                    status = "Offline"
+                    server_name = "-"
                     if "Current Server(s)" in driver.page_source:
                         try:
                             header = driver.find_element(By.XPATH, "//dt[contains(text(), 'Current Server(s)')]")
                             status_element = header.find_element(By.XPATH, "./following-sibling::dd")
                             val = status_element.text.strip()
                             if val and "Not online" not in val:
-                                server = val
+                                status = "Online"
+                                server_name = val
                         except:
                             pass
 
-                    status_text = f"ОНЛАЙН: {name} на {server}" if server != "Offline" else f"ОФЛАЙН: {name}"
-                    log_to_file(status_text)
+                    log_to_csv(name, status, server_name)
 
                 except Exception as e:
-                    print(f"❌ Помилка при перевірці {url}: {e}")
+                    print(f"❌ Помилка з {url}: {e}")
 
                 time.sleep(2)
 
@@ -75,12 +83,11 @@ def check_players():
                 except:
                     pass
 
-        print(f"💤 Очікування {DELAY_BETWEEN_CYCLES} секунд до наступної перевірки...")
+        print(f"💤 Пауза {DELAY_BETWEEN_CYCLES} сек...")
         time.sleep(DELAY_BETWEEN_CYCLES)
-
 
 if __name__ == '__main__':
     try:
         check_players()
     except KeyboardInterrupt:
-        print("\n🛑 Моніторинг зупинено користувачем.")
+        print("\n🛑 Зупинено.")
